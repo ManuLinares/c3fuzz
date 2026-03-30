@@ -1,0 +1,20 @@
+{
+	"warnings": [ "warn-deadcode=yes" ],
+	"authors": [ "Manuel Linares <mbarriolinares@gmail.com>" ],
+	"version": "0.1.0",
+	"sources": [ "src/**" ],
+	"dependencies": [ "tree_sitter_c3" ],
+	"dependency-search-paths": [ "dep/tree-sitter-c3/bindings/c3/" ],
+	"linked-libraries": [ "tree-sitter" ],
+	"build-dir": "build",
+	"output": "build",
+	"targets": {
+		"c3fuzz": {
+			"type": "executable"
+		}
+	},
+	"cpu": "native",
+	"opt": "O1",
+	"features": ["VMEM_TEMP"]
+	// See resources/examples/project_all_settings.json and 'c3c --list-project-properties' to see more properties.
+}

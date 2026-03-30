@@ -1,0 +1,102 @@
+name: web
+
+on:
+  # schedule:
+  #   - cron: '*/20 * * * *' # Run every 20 minutes
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["fuzz"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install C3 Compiler
+        run: |
+          #wget https://github.com/c3lang/c3c/releases/download/latest-prerelease-tag/c3-linux.tar.gz
+          wget https://github.com/c3lang/c3c/releases/download/v0.7.11/c3-linux.tar.gz
+          tar -xf c3-linux.tar.gz
+          echo "$GITHUB_WORKSPACE/c3" >> $GITHUB_PATH
+
+      - name: Patch C3 Standard Library
+        run: |
+          patch -d c3 -p1 << 'EOF'
+          diff --git a/lib/std/os/process.c3 b/lib/std/os/process.c3
+          index 70354310e..fae3fc9ce 100644
+          --- a/lib/std/os/process.c3
+          +++ b/lib/std/os/process.c3
+          @@ -235,6 +235,17 @@ fn Process? spawn(String[] command_line, SpawnOptions options = { }, String[] en
+           		if (posix::pipe(&stdoutfd)) return FAILED_TO_OPEN_STDOUT~;
+           		if (!(options & STDERR_TO_STDOUT) && posix::pipe(&stderrfd)) return FAILED_TO_OPEN_STDERR~;
+
+          +		// Set FD_CLOEXEC to prevent leaking pipe handles between concurrent spawns
+          +		os::fcntl((NativeSocket)stdinfd[0], 2, 1);
+          +		os::fcntl((NativeSocket)stdinfd[1], 2, 1);
+          +		os::fcntl((NativeSocket)stdoutfd[0], 2, 1);
+          +		os::fcntl((NativeSocket)stdoutfd[1], 2, 1);
+          +		if (!(options & STDERR_TO_STDOUT))
+          +		{
+          +			os::fcntl((NativeSocket)stderrfd[0], 2, 1);
+          +			os::fcntl((NativeSocket)stderrfd[1], 2, 1);
+          +		}
+          +
+           		if (options & ASYNC_OUTPUT)
+           		{
+           			((NativeSocket)stdoutfd[0]).set_non_blocking(true)!;
+          EOF
+
+      - name: Install Dependencies
+        run: |
+          git clone --depth=1 --branch=v0.25.3 https://github.com/tree-sitter/tree-sitter.git /tmp/tree-sitter
+          cd /tmp/tree-sitter
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+
+      - name: Build Fuzzer
+        run: |
+          c3c build
+
+      - name: Disable Core Dumps (Fixes CI Timeouts)
+        run: |
+          sudo sysctl -w kernel.core_pattern=core
+          ulimit -c 0
+
+      - name: Create Final Report
+        run: |
+          ./build/c3fuzz --report
+
+      - name: Prepare Pages
+        run: |
+          mkdir -p public
+          if [ -f fuzzer_report.html ]; then
+            cp fuzzer_report.html public/index.html
+          else
+            echo "<h1>No findings yet</h1><p>The fuzzer ran but found no reproducible crashes.</p>" > public/index.html
+          fi
+          cp logo.svg public/logo.svg
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

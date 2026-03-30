@@ -1,0 +1,118 @@
+name: fuzz
+
+concurrency:
+  group: fuzzing
+  cancel-in-progress: false # Allow currently running fuzz session to finish correctly
+
+on:
+  # schedule:
+  #   - cron: '0 * * * *' # Run at the start of every hour
+  workflow_dispatch:
+    inputs:
+      timeout:
+        description: 'Fuzzing duration (seconds)'
+        required: false
+        default: '3300'
+
+permissions:
+  contents: write
+
+jobs:
+  fuzz:
+    strategy:
+      fail-fast: false
+      matrix:
+        instance: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install C3 Compiler
+        run: |
+          #wget https://github.com/c3lang/c3c/releases/download/latest-prerelease-tag/c3-linux.tar.gz
+          wget https://github.com/c3lang/c3c/releases/download/v0.7.11/c3-linux.tar.gz
+          tar -xf c3-linux.tar.gz
+          echo "$GITHUB_WORKSPACE/c3" >> $GITHUB_PATH
+
+      - name: Patch C3 Standard Library
+        run: |
+          patch -d c3 -p1 << 'EOF'
+          diff --git a/lib/std/os/process.c3 b/lib/std/os/process.c3
+          index 70354310e..fae3fc9ce 100644
+          --- a/lib/std/os/process.c3
+          +++ b/lib/std/os/process.c3
+          @@ -235,6 +235,17 @@ fn Process? spawn(String[] command_line, SpawnOptions options = { }, String[] en
+           		if (posix::pipe(&stdoutfd)) return FAILED_TO_OPEN_STDOUT~;
+           		if (!(options & STDERR_TO_STDOUT) && posix::pipe(&stderrfd)) return FAILED_TO_OPEN_STDERR~;
+
+          +		// Set FD_CLOEXEC to prevent leaking pipe handles between concurrent spawns
+          +		os::fcntl((NativeSocket)stdinfd[0], 2, 1);
+          +		os::fcntl((NativeSocket)stdinfd[1], 2, 1);
+          +		os::fcntl((NativeSocket)stdoutfd[0], 2, 1);
+          +		os::fcntl((NativeSocket)stdoutfd[1], 2, 1);
+          +		if (!(options & STDERR_TO_STDOUT))
+          +		{
+          +			os::fcntl((NativeSocket)stderrfd[0], 2, 1);
+          +			os::fcntl((NativeSocket)stderrfd[1], 2, 1);
+          +		}
+          +
+           		if (options & ASYNC_OUTPUT)
+           		{
+           			((NativeSocket)stdoutfd[0]).set_non_blocking(true)!;
+          EOF
+
+      - name: Install Dependencies
+        run: |
+          git clone --depth=1 --branch=v0.25.3 https://github.com/tree-sitter/tree-sitter.git /tmp/tree-sitter
+          cd /tmp/tree-sitter
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+
+      - name: Fetch Test Suite
+        run: |
+          git clone --depth=1 https://github.com/c3lang/c3c.git /tmp/c3c
+          cp -r /tmp/c3c/test/test_suite ./test_suite
+
+      - name: Build Fuzzer
+        run: |
+          c3c build
+
+      - name: Disable Core Dumps (Fixes CI Timeouts)
+        run: |
+          sudo sysctl -w kernel.core_pattern=core
+          ulimit -c 0
+
+      - name: Run Fuzzer (Instance ${{ matrix.instance }})
+        run: |
+          mkdir -p crash segfault timeout
+          TIMEOUT="${{ github.event.inputs.timeout || '3300' }}"
+          echo "Instance ${{ matrix.instance }} running for $TIMEOUT seconds..."
+          ./build/c3fuzz -t $TIMEOUT -s c3/lib/std -s crash -s segfault -s timeout
+
+      - name: Commit Findings
+        if: always() && github.ref == 'refs/heads/master'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p crash segfault timeout old
+          git add crash/ segfault/ timeout/ old/
+          if ! git diff --cached --quiet; then
+            git commit -m "Fuzzer snapshot (Instance ${{ matrix.instance }}): $(date +'%Y-%m-%d %H:%M')"
+            for i in {1..10}; do
+              git pull --rebase -X ours --autostash origin master || true
+              if git push origin HEAD:master; then
+                echo "Successfully pushed findings."
+                exit 0
+              fi
+              echo "Push failed (conflict with other instance). Retrying ($i/10)..."
+              sleep $((RANDOM % 20 + 5))
+            done
+            echo "Failed to push new findings after 10 attempts."
+            exit 1
+          else
+            echo "No new findings to commit."
+          fi
