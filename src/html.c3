@@ -46,6 +46,12 @@ fn void generate_report()
 				{
 					if (try source = (String)std::io::file::load_temp(p.path_string))
 					{
+						// Skip noisy assembly-related findings in the dashboard
+						if (source.contains("asm(\""))
+						{
+							continue;
+						}
+
 						CrashInfo res = get_crash_info(source);
 
 						if (res.result == COMPILED)
