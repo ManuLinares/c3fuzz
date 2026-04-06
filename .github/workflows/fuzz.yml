@@ -32,8 +32,8 @@ jobs:
 
       - name: Install C3 Compiler
         run: |
-          #wget https://github.com/c3lang/c3c/releases/download/latest-prerelease-tag/c3-linux.tar.gz
-          wget https://github.com/c3lang/c3c/releases/download/v0.7.11/c3-linux.tar.gz
+          wget https://github.com/c3lang/c3c/releases/download/latest-prerelease-tag/c3-linux.tar.gz
+          #wget https://github.com/c3lang/c3c/releases/download/v0.7.11/c3-linux.tar.gz
           tar -xf c3-linux.tar.gz
           echo "$GITHUB_WORKSPACE/c3" >> $GITHUB_PATH
 

@@ -427,7 +427,7 @@ fn int main(String[] args)
 	List{String} seed_dirs;
 	seed_dirs.init(tmem);
 
-	for (isz i = 1; i < args.len; i++)
+	for (sz i = 1; i < args.len; i++)
 	{
 		String arg = args[i];
 		if (arg == "-h" || arg == "--help")
