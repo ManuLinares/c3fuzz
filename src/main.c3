@@ -904,7 +904,7 @@ fn String mutate_source(String source)
 		1, 1, // Duplicate
 		2, 2, // Swap
 		3, 3, // Suffix
-		4, 4, 4, 4, 4, 4, // Crossover
+		4, 4, 4, // Crossover
 		5, // Op Mutation
 		6, // Literal Torture
 		7, // Result Abuse
@@ -915,7 +915,8 @@ fn String mutate_source(String source)
 		13, 13, // Property/Swizzle
 		14, // Scope Inversion
 		15, 15, 15, 15, // GOLD before tests crossover
-		16, 16, 16, 16 // Macro/CTE Torture
+		16, 16, 16, 16, // Macro/CTE Torture
+		17, 17, 17, 17 // Operator Overloading Torture
 		};
 	int strategy = weights[math::random::rand(weights.len)];
 	int idx = math::random::rand((int)nodes.len());
@@ -1172,6 +1173,81 @@ fn String mutate_source(String source)
 				}
 				if (end < source.len) result.append(source[end..]);
 			}
+		case 17: // Operator Overloading Torture
+			{
+				String struct_name = "FuzzedType";
+				if (type == "struct_definition" || type == "bitstruct_definition")
+				{
+					for (uint i = 0; i < ts::ts_node_child_count(target); i++)
+					{
+						ts::TSNode child = ts::ts_node_child(target, i);
+						char* c_type_ptr = ts::ts_node_type(child);
+						String c_type = c_type_ptr == null ? "" : ((ZString)c_type_ptr).str_view();
+						if (c_type == "type_identifier" || c_type == "identifier")
+						{
+							String n = get_node_text(source, child).trim();
+							if (n.len > 0) struct_name = n;
+							break;
+						}
+					}
+				}
+				else
+				{
+					// If we are not on a struct, maybe inject a whole one
+					result.append("struct FuzzedOpStruct { int a; double b; }\n");
+					struct_name = "FuzzedOpStruct";
+				}
+
+				DString ops_code;
+				ops_code.init(tmem);
+				int choice = math::random::rand(8);
+				switch (choice)
+				{
+					case 0: // Container basic
+						ops_code.appendf("fn int %s.get(&self, usz i) @operator([]) { return 0; }\n", struct_name);
+						ops_code.appendf("fn usz %s.len(&self) @operator(len) { return 1; }\n", struct_name);
+					case 1: // Set & Ref
+						ops_code.appendf("fn void %s.set(&self, usz i, int v) @operator([]=) { }\n", struct_name);
+						ops_code.appendf("fn int* %s.get_ref(&self, usz i) @operator(&[]) { return null; }\n", struct_name);
+					case 2: // Arithmetic
+						ops_code.appendf("fn %s %s.add(self, %s other) @operator(+) { return self; }\n", struct_name, struct_name, struct_name);
+						ops_code.appendf("fn %s %s.sub(self, double d) @operator_s(-) { return self; }\n", struct_name, struct_name);
+					case 3: // Symmetric/Reverse
+						ops_code.appendf("macro %s %s.mul_d(self, double d) @operator_s(*) { return self; }\n", struct_name, struct_name);
+						ops_code.appendf("macro %s %s.div_r(self, int i) @operator_r(/) { return self; }\n", struct_name, struct_name);
+					case 4: // Comparison & Comparison (new < operator)
+						ops_code.appendf("fn bool %s.eq(self, %s other) @operator(==) { return true; }\n", struct_name, struct_name);
+						ops_code.appendf("fn bool %s.lt(self, %s other) @operator(<) { return false; }\n", struct_name, struct_name);
+					case 5: // Bitwise (should error on bitstructs? lets test)
+						ops_code.appendf("fn %s %s.xor(self, %s other) @operator(^) { return self; }\n", struct_name, struct_name, struct_name);
+						ops_code.appendf("fn %s %s.shl(self, int i) @operator(<<) { return self; }\n", struct_name, struct_name);
+					case 6: // Combined assignment
+						ops_code.appendf("fn %s %s.add_ass(&self, %s other) @operator(+=) { return *self; }\n", struct_name, struct_name, struct_name);
+					case 7: // Implicit casting matches
+						ops_code.appendf("fn %s %s.f(self, float f) @operator(-) { return self; }\n", struct_name, struct_name);
+						ops_code.appendf("fn %s %s.d(self, double d) @operator(-) { return self; }\n", struct_name, struct_name);
+				}
+
+				result.append(source[0:end]);
+				result.append("\n");
+				result.append(ops_code.str_view());
+				if (end < source.len) result.append(source[end..]);
+
+				result.appendf("\nfn void fuzzed_op_test_%d(%s s) { \n", math::random::rand(1000), struct_name);
+				result.append("  var x = s; \n");
+				switch (choice)
+				{
+					case 0: result.append("  int x0 = x[0]; foreach (v : x) { (void)v; } \n");
+					case 1: result.append("  x[0] = 1; var r = &x[0]; \n");
+					case 2: result.append("  x = x + x; x = x - 1.0; x = 1.0 - x; \n");
+					case 3: result.append("  x = x * 2.0; x = 2.0 * x; x = 10.0 / x; \n");
+					case 4: result.append("  bool b = (x == x) || (x != x) || (x < x);\n");
+					case 5: result.append("  x = x ^ x; x = x << 1; \n");
+					case 6: result.append("  x += x; \n");
+					case 7: result.append("  x = x - 1.0f; x = x - 2.0; x = x - 3; // possible ambiguity error \n");
+				}
+				result.append("}\n");
+			}
 		default:
 			result.append(source);
 	}
@@ -1180,6 +1256,6 @@ fn String mutate_source(String source)
 	ts::ts_parser_delete(parser);
 
 	String mutated = result.copy_str(mem);
-	if (false) io::printfn("--- mutation ---\n%s\n--- end of mutation ---", mutated);
+	if (false) io::printfn("--- mutation ---\n%s\n--- end of mutation ---", mutated); //DEBUG! TODO!
 	return mutated.len > 0 ? mutated : source;
 }
