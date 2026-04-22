@@ -17,6 +17,7 @@ struct CrashInfo
 	CompilerResult result;
 	String key;
 	String output;
+	bool is_valid;
 }
 
 struct Stats
@@ -613,7 +614,7 @@ fn int main(String[] args)
 struct Rlimit { ulong rlim_cur; ulong rlim_max; }
 extern fn CInt setrlimit(CInt resource, Rlimit* rlim);
 
-fn CrashInfo get_crash_info(String input)
+fn CrashInfo get_crash_info(String input, bool check_only = false)
 {
 	// Disable core dumps to prevent the kernel from stalling the process
 	// while writing memory to disk on a segfault. This does not always work
@@ -627,9 +628,17 @@ fn CrashInfo get_crash_info(String input)
 	}
 
 	String build_dir = thread_build_dir.len > 0 ? thread_build_dir : "/tmp";
-	String[] cmd = { "c3c", "compile-only", "-", "--build-dir", build_dir, "--obj-out", build_dir,
-		"-O0", "-g0", "--threads", "1",
-		"--use-stdlib=no", "--no-entry" };
+	String[] cmd;
+	if (check_only)
+	{
+		cmd = { "c3c", "compile-only", "-C", "-", "--build-dir", build_dir, "--obj-out", build_dir,
+			"-O0", "-g0", "--threads", "1", "--no-entry" };
+	}
+	else
+	{
+		cmd = { "c3c", "compile-only", "-", "--build-dir", build_dir, "--obj-out", build_dir,
+			"-O0", "-g0", "--threads", "1", "--no-entry" };
+	}
 	Process proc = process::spawn(cmd, INHERIT_ENV | STDERR_TO_STDOUT | ASYNC_OUTPUT)!!;
 	defer proc.destroy();
 
@@ -667,13 +676,13 @@ fn CrashInfo get_crash_info(String input)
 		if (time::now() - start > TIMEOUT)
 		{
 			proc.terminate()!!;
-			return { TIMEOUT, string::tformat("TIMEOUT:%x", fnv64a::hash(input[..])), "" };
+			return { TIMEOUT, string::tformat("TIMEOUT:%x", fnv64a::hash(input[..])), "", false };
 		}
 
 		if (should_quit.load())
 		{
 			proc.terminate()!!;
-			return { COMPILED, "", "" };
+			return { COMPILED, "", "", false };
 		}
 
 		usz? len = proc.read_stdout(&stdout_buf, stdout_buf.len);
@@ -704,12 +713,18 @@ fn CrashInfo get_crash_info(String input)
 
 	String out_str = output.str_view();
 
+	bool valid = false;
+	if (posix::wIFEXITED(raw_status) && posix::wEXITSTATUS(raw_status) == 0)
+	{
+		valid = true;
+	}
+
 	// Use raw_status for signal detection instead of the processed return_status from the process stdlib
 	if (posix::wIFSIGNALED(raw_status))
 	{
 		CInt sig = posix::wTERMSIG(raw_status);
 		// If it's a failure (1) or a signal was detected
-		if (sig == libc::SIGINT || sig == libc::SIGKILL) return { COMPILED, "", "" };
+		if (sig == libc::SIGINT || sig == libc::SIGKILL) return { COMPILED, "", "", false };
 		if (sig == libc::SIGSEGV || sig == libc::SIGABRT)
 		{
 			String bt_key = "";
@@ -723,9 +738,9 @@ fn CrashInfo get_crash_info(String input)
 			{
 				bt_key = string::tformat("SRC:%x", fnv64a::hash((char[])input)).copy(mem);
 			}
-			return { SEGFAULT, bt_key, out_str.copy(mem) };
+			return { SEGFAULT, bt_key, out_str.copy(mem), false };
 		}
-		return { CRASH, string::tformat("SIG:%d", (int)sig).copy(mem), out_str.copy(mem) };
+		return { CRASH, string::tformat("SIG:%d", (int)sig).copy(mem), out_str.copy(mem), false };
 	}
 
 	if (out_str.contains("⚠️ The compiler encountered an unexpected error: "))
@@ -753,10 +768,10 @@ fn CrashInfo get_crash_info(String input)
 			}
 		}
 		String dedup_key = string::tformat("%s|%s", func_key, file_key);
-		return { CRASH, dedup_key.copy(mem), out_str.copy(mem) };
+		return { CRASH, dedup_key.copy(mem), out_str.copy(mem), false };
 	}
 
-	return { COMPILED, "", out_str };
+	return { COMPILED, "", out_str, valid };
 }
 
 fn String reduce_source(String source, CompilerResult target_result, String target_key, Duration max_duration = (Duration)10)
@@ -797,7 +812,11 @@ fn String reduce_source(String source, CompilerResult target_result, String targ
 			if (end < current_best.len) test_ds.append(current_best[end..]);
 			String test_src = test_ds.tcopy_str();
 
-			CrashInfo info = get_crash_info(test_src);
+			CrashInfo info = get_crash_info(test_src, true);
+			if (info.result == COMPILED)
+			{
+				if (info.is_valid) info = get_crash_info(test_src, false);
+			}
 
 			// For silent segfaults and timeouts, the key is source-based and volatile.
 			// ONLY require that the crash type matches during reduction.
@@ -820,7 +839,13 @@ fn String reduce_source(String source, CompilerResult target_result, String targ
 
 fn CompilerResult compile(String input)
 {
-	CrashInfo info = get_crash_info(input);
+	CrashInfo info = get_crash_info(input, true);
+
+	if (info.result == COMPILED)
+	{
+		if (!info.is_valid) return COMPILED;
+		info = get_crash_info(input, false);
+	}
 
 	// io::printfn("\n======> OUTPUT WAS: %s\n<======", info.output);
 	// thread::sleep_ms(1000); // TODO: remove debug printout
