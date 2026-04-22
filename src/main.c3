@@ -301,10 +301,10 @@ fn void collect_c3_files(std::io::path::Path p, List{String}* seeds) @local
 
 fn void extract_snippets(String source, bool is_regression = false)
 {
-	ts::TSParser* parser = ts::ts_parser_new();
+	TSParser* parser = ts::ts_parser_new();
 	ts::ts_parser_set_language(parser, tree_sitter_c3::language());
-	ts::TSTree* tree = ts::ts_parser_parse_string(parser, null, source.zstr_tcopy(), (uint)source.len);
-	ts::TSNode root = ts::ts_tree_root_node(tree);
+	TSTree* tree = ts::ts_parser_parse_string(parser, null, source.zstr_tcopy(), (uint)source.len);
+	TSNode root = ts::ts_tree_root_node(tree);
 
 	NodeList nodes;
 	nodes.init(mem);
@@ -763,7 +763,7 @@ fn String reduce_source(String source, CompilerResult target_result, String targ
 {
 	String current_best = source.copy(tmem);
 
-	ts::TSParser* parser = ts::ts_parser_new();
+	TSParser* parser = ts::ts_parser_new();
 	ts::ts_parser_set_language(parser, tree_sitter_c3::language());
 
 	Time start_time = time::now();
@@ -773,8 +773,8 @@ fn String reduce_source(String source, CompilerResult target_result, String targ
 		if (max_duration > (Duration)0 && time::now() - start_time > max_duration) break;
 
 		changed = false;
-		ts::TSTree* tree = ts::ts_parser_parse_string(parser, null, current_best.zstr_tcopy(), (uint)current_best.len);
-		ts::TSNode root = ts::ts_tree_root_node(tree);
+		TSTree* tree = ts::ts_parser_parse_string(parser, null, current_best.zstr_tcopy(), (uint)current_best.len);
+		TSNode root = ts::ts_tree_root_node(tree);
 
 		NodeList nodes;
 		nodes.init(mem);
@@ -785,7 +785,7 @@ fn String reduce_source(String source, CompilerResult target_result, String targ
 		{
 			if (max_duration > (Duration)0 && time::now() - start_time > max_duration) break;
 
-			ts::TSNode node = nodes[i];
+			TSNode node = nodes[i];
 			if (!ts::ts_node_is_named(node)) continue;
 
 			uint start = ts::ts_node_start_byte(node);
@@ -863,13 +863,13 @@ fn void collect_nodes(TSNode node, NodeList* list, int depth = 0)
 	uint kids = ts::ts_node_child_count(node);
 	for (uint i = 0; i < kids; i++)
 	{
-		ts::TSNode child = ts::ts_node_child(node, i);
+		TSNode child = ts::ts_node_child(node, i);
 		if (ts::ts_node_is_named(child)) list.push(child);
 		collect_nodes(child, list, depth + 1);
 	}
 }
 
-fn String get_node_text(String source, ts::TSNode node)
+fn String get_node_text(String source, TSNode node)
 {
 	uint start = ts::ts_node_start_byte(node);
 	uint end = ts::ts_node_end_byte(node);
@@ -1182,7 +1182,7 @@ fn String mutate_source(String source)
 				{
 					for (uint i = 0; i < ts::ts_node_child_count(target); i++)
 					{
-						ts::TSNode child = ts::ts_node_child(target, i);
+						TSNode child = ts::ts_node_child(target, i);
 						char* c_type_ptr = ts::ts_node_type(child);
 						String c_type = c_type_ptr == null ? "" : ((ZString)c_type_ptr).str_view();
 						if (c_type == "type_identifier" || c_type == "identifier")
