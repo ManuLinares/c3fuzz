@@ -183,7 +183,7 @@ fn float source_similarity(String a, String b)
 	usz pairs_a = sa.len - 1;
 	usz pairs_b = sb.len - 1;
 
-	mem::set(&similarity_counts, 0, uint.sizeof * 65536);
+	mem::set(&similarity_counts, 0, uint::size * 65536);
 
 	for (usz i = 0; i < pairs_a; i++)
 	{
@@ -397,7 +397,7 @@ fn void finalize_seeds()
 fn String generate_source()
 {
 	if (global_seeds.len() == 0) return mutate_source("import std::io; fn void main(){}");
-	return mutate_source(global_seeds[math::random::rand((int)global_seeds.len())]);
+	return mutate_source(global_seeds[rand((int)global_seeds.len())]);
 }
 
 fn void bootstrap_crashes(String dir)
@@ -531,7 +531,7 @@ fn int main(String[] args)
 	// 1. Shuffle all gathered seeds yeah
 	for (int i = (int)global_seeds.len() - 1; i > 0; i--)
 	{
-		int j = math::random::rand(i + 1);
+		int j = rand(i + 1);
 		String tmp = global_seeds[i];
 		global_seeds[i] = global_seeds[j];
 		global_seeds[j] = tmp;
@@ -908,7 +908,7 @@ fn String mutate_source(String source)
 		5, // Op Mutation
 		6, // Literal Torture
 		7, // Result Abuse
-		8, // Reflection Abuse
+		8, 8, // Reflection Abuse (.description / short_name)
 		// 9, 10, // Edge Cases
 		11, 11, // Generic Grinder
 		12, 12, // Slice Torture
@@ -916,10 +916,12 @@ fn String mutate_source(String source)
 		14, // Scope Inversion
 		15, 15, 15, 15, // GOLD before tests crossover
 		16, 16, 16, 16, // Macro/CTE Torture
-		17, 17, 17, 17 // Operator Overloading Torture
+		17, 17, 17, 17, // Operator Overloading Torture
+		18, 18, 18, // Type Reflection Torture
+		19, 19 // Value Reflection Torture
 		};
-	int strategy = weights[math::random::rand(weights.len)];
-	int idx = math::random::rand((int)nodes.len());
+	int strategy = weights[rand(weights.len)];
+	int idx = rand((int)nodes.len());
 	TSNode target = nodes[idx];
 	uint start = ts::ts_node_start_byte(target);
 	uint end = ts::ts_node_end_byte(target);
@@ -943,7 +945,7 @@ fn String mutate_source(String source)
 		case 2: // Swap Node
 			if (nodes.len() > 1)
 			{
-				int idx2 = math::random::rand((int)nodes.len());
+				int idx2 = rand((int)nodes.len());
 				TSNode n2 = nodes[idx2];
 				uint s2 = ts::ts_node_start_byte(n2);
 				uint e2 = ts::ts_node_end_byte(n2);
@@ -967,12 +969,12 @@ fn String mutate_source(String source)
 		case 3: // Suffix Injection
 			String[4] suffixes = { "~!", "~!!", "!!", "!" };
 			result.append(source[0:end]);
-			result.append(suffixes[math::random::rand(4)]);
+			result.append(suffixes[rand(4)]);
 			if (end < source.len) result.append(source[end..]);
 		case 4: // Snippet Crossover
 			String donor = "";
 			snippet_pool_mu.lock();
-			if (snippet_pool.len() > 0) donor = snippet_pool[math::random::rand((int)snippet_pool.len())];
+			if (snippet_pool.len() > 0) donor = snippet_pool[rand((int)snippet_pool.len())];
 			snippet_pool_mu.unlock();
 			if (donor.len > 0)
 			{
@@ -994,7 +996,7 @@ fn String mutate_source(String source)
 				TSNode right = ts::ts_node_child(target, 2);
 				result.append(get_node_text(source, left));
 				result.append(" ");
-				result.append(ops[math::random::rand(8)]);
+				result.append(ops[rand(8)]);
 				result.append(" ");
 				result.append(get_node_text(source, right));
 				if (end < source.len) result.append(source[end..]);
@@ -1007,9 +1009,9 @@ fn String mutate_source(String source)
 			if (type == "integer_literal")
 			{
 				result.append(source[0:start]);
-				if (math::random::rand(2) == 0)
+				if (rand(2) == 0)
 				{
-					result.appendf("%d", math::random::rand(1000000));
+					result.appendf("%d", rand(1000000));
 				}
 				else
 				{
@@ -1023,7 +1025,7 @@ fn String mutate_source(String source)
 			}
 		case 7: // Result/Optional Abuse
 			result.append(source[0:start]);
-			if (math::random::rand(2) == 0)
+			if (rand(2) == 0)
 			{
 				result.append("(catch ");
 				result.append(get_node_text(source, target));
@@ -1036,10 +1038,10 @@ fn String mutate_source(String source)
 				result.append(")");
 			}
 			if (end < source.len) result.append(source[end..]);
-		case 8: // Reflection Abuse
+		case 8: // Description Abuse
 			result.append(source[0:start]);
 			result.append(get_node_text(source, target));
-			result.append(".@short_name");
+			result.append(rand(2) == 0 ? ".description" : ".@short_name");
 			if (end < source.len) result.append(source[end..]);
 		case 9: // Segfault Edge Case
 			result.clear();
@@ -1052,13 +1054,13 @@ fn String mutate_source(String source)
 				result.append(source[0:start]);
 				String text = get_node_text(source, target);
 				String[4] g_types = { "T", "Element", "Result", "K" };
-				String g_name = g_types[math::random::rand(4)];
+				String g_name = g_types[rand(4)];
 
 				if (type == "module_declaration")
 				{
 					usz start_mod = (text.index_of("module") ?? 0) + 6;
-					usz end_mod = text.index_of(";") ?? long.max;
-					if (start_mod < end_mod && end_mod != long.max)
+					usz end_mod = text.index_of(";") ?? long::max;
+					if (start_mod < end_mod && end_mod != long::max)
 					{
 						result.append("module ");
 						result.append(text[start_mod:end_mod - start_mod].trim());
@@ -1077,7 +1079,7 @@ fn String mutate_source(String source)
 				else if (type == "identifier")
 				{
 					result.append(text);
-					if (math::random::rand(2) == 0)
+					if (rand(2) == 0)
 					{
 						result.append("{int, double}");
 					}
@@ -1099,7 +1101,7 @@ fn String mutate_source(String source)
 				String text = get_node_text(source, target);
 				String[5] patterns = { "[^3..^1]", "[..^0]", "[-1..]", "[2..0]", "[^4..]" };
 				result.append(text);
-				result.append(patterns[math::random::rand(5)]);
+				result.append(patterns[rand(5)]);
 				if (end < source.len) result.append(source[end..]);
 			}
 		case 13: // Property/Swizzle Torture
@@ -1108,7 +1110,7 @@ fn String mutate_source(String source)
 				String text = get_node_text(source, target);
 				String[6] swizzles = { ".xyzw", ".rgba", ".x", ".rbx", ".xz", ".@type" };
 				result.append(text);
-				result.append(swizzles[math::random::rand(6)]);
+				result.append(swizzles[rand(6)]);
 				if (end < source.len) result.append(source[end..]);
 			}
 		case 14: // Scope Inversion
@@ -1122,7 +1124,7 @@ fn String mutate_source(String source)
 		case 15: // maybe GOLD Crossover
 			String donor = "";
 			regression_pool_mu.lock();
-			if (regression_pool.len() > 0) donor = regression_pool[math::random::rand((int)regression_pool.len())];
+			if (regression_pool.len() > 0) donor = regression_pool[rand((int)regression_pool.len())];
 			regression_pool_mu.unlock();
 			if (donor.len > 0)
 			{
@@ -1144,7 +1146,7 @@ fn String mutate_source(String source)
 					result.append("@");
 					result.append(text);
 				}
-				else if (type == "identifier" && math::random::rand(2) == 0)
+				else if (type == "identifier" && rand(2) == 0)
 				{
 					result.append("$");
 					result.append(text);
@@ -1152,12 +1154,12 @@ fn String mutate_source(String source)
 				else
 				{
 					String[12] builtins = {
-						"$sizeof", "$typeof", "$alignof", "$nameof", "$qnameof",
-						"$stringify", "$defined", "$is_const", "$vacount", "$vaconst",
-						"$vaexpr", "$vasplat"
+						"@sizeof", "$typeof", "@alignof", "@kindof", "$expand",
+						"$stringify", "$defined", "$vacount", "$vaconst",
+						"$vaexpr", "$vasplat", "$reflect"
 						};
-					String b = builtins[math::random::rand(12)];
-					if (math::random::rand(4) == 0)
+					String b = builtins[rand(12)];
+					if (rand(4) == 0)
 					{
 						result.appendf("$if $defined(%s): ", text);
 						result.append(text);
@@ -1200,7 +1202,7 @@ fn String mutate_source(String source)
 
 				DString ops_code;
 				ops_code.init(tmem);
-				int choice = math::random::rand(8);
+				int choice = rand(8);
 				switch (choice)
 				{
 					case 0: // Container basic
@@ -1233,7 +1235,7 @@ fn String mutate_source(String source)
 				result.append(ops_code.str_view());
 				if (end < source.len) result.append(source[end..]);
 
-				result.appendf("\nfn void fuzzed_op_test_%d(%s s) { \n", math::random::rand(1000), struct_name);
+				result.appendf("\nfn void fuzzed_op_test_%d(%s s) { \n", rand(1000), struct_name);
 				result.append("  var x = s; \n");
 				switch (choice)
 				{
@@ -1247,6 +1249,26 @@ fn String mutate_source(String source)
 					case 7: result.append("  x = x - 1.0f; x = x - 2.0; x = x - 3; // possible ambiguity error \n");
 				}
 				result.append("}\n");
+			}
+		case 18: // Type Reflection Torture
+			{
+				result.append(source[0:start]);
+				String text = get_node_text(source, target);
+				String[10] props = { "::size", "::alignment", "::has_equals", "::members", "::len", "::max", "::min", "::kind", "::values", "::get_tag()" };
+				result.append(text);
+				result.append(props[rand(10)]);
+				if (end < source.len) result.append(source[end..]);
+			}
+		case 19: // Value Reflection Torture
+			{
+				result.append(source[0:start]);
+				String text = get_node_text(source, target);
+				String[5] props = { ".name", ".size", ".offset", ".alignment", ".tags" };
+				result.append("$reflect(");
+				result.append(text);
+				result.append(")");
+				result.append(props[rand(5)]);
+				if (end < source.len) result.append(source[end..]);
 			}
 		default:
 			result.append(source);
