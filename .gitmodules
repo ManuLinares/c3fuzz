@@ -1,3 +1,4 @@
 [submodule "dep/tree-sitter-c3"]
 	path = dep/tree-sitter-c3
 	url = https://github.com/c3lang/tree-sitter-c3.git
+	branch = c3-0.8
