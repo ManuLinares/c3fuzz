@@ -380,7 +380,7 @@ fn void collect_smart_nodes(TSNode node, NodeList* list, int depth = 0)
 
 fn void gather_seeds(String dir)
 {
-	usz before = global_seeds.len();
+	sz before = global_seeds.len();
 	collect_c3_files(dir.to_tpath()!!, &global_seeds);
 	log::info("Gathered %d seeds from %s", global_seeds.len() - before, dir);
 }
@@ -685,7 +685,7 @@ fn CrashInfo get_crash_info(String input, bool check_only = false)
 			return { COMPILED, "", "", false };
 		}
 
-		usz? len = proc.read_stdout(&stdout_buf, stdout_buf.len);
+		sz? len = proc.read_stdout(&stdout_buf, stdout_buf.len);
 		if (try l = len)
 		{
 			if (l > 0) output.append(stdout_buf[:l]);
@@ -698,7 +698,7 @@ fn CrashInfo get_crash_info(String input, bool check_only = false)
 
 	while (true)
 	{
-		usz? len = proc.read_stdout(&stdout_buf, stdout_buf.len);
+		sz? len = proc.read_stdout(&stdout_buf, stdout_buf.len);
 		if (try l = len)
 		{
 			if (l == 0) break;
@@ -731,7 +731,7 @@ fn CrashInfo get_crash_info(String input, bool check_only = false)
 			if (try idx = out_str.index_of("LLVM ERROR: "))
 			{
 				String after = out_str[idx..];
-				usz end = after.index_of("\n") ?? after.len;
+				sz end = after.index_of("\n") ?? after.len;
 				bt_key = after[:end].trim().copy(mem);
 			}
 			else
@@ -749,14 +749,14 @@ fn CrashInfo get_crash_info(String input, bool check_only = false)
 		if (try fidx = out_str.index_of("- Function: "))
 		{
 			String after = out_str[fidx + 12..];
-			usz end = after.index_of("\n") ?? after.len;
+			sz end = after.index_of("\n") ?? after.len;
 			func_key = after[:end].trim();
 		}
 		String file_key = "";
 		if (try sidx = out_str.index_of("- Source file: "))
 		{
 			String after = out_str[sidx + 15..];
-			usz end = after.index_of("\n") ?? after.len;
+			sz end = after.index_of("\n") ?? after.len;
 			String full_path = after[:end].trim();
 			if (try slash = full_path.rindex_of("/"))
 			{
@@ -1083,8 +1083,8 @@ fn String mutate_source(String source)
 
 				if (type == "module_declaration")
 				{
-					usz start_mod = (text.index_of("module") ?? 0) + 6;
-					usz end_mod = text.index_of(";") ?? long::max;
+					sz start_mod = (text.index_of("module") ?? 0) + 6;
+					sz end_mod = text.index_of(";") ?? long::max;
 					if (start_mod < end_mod && end_mod != long::max)
 					{
 						result.append("module ");

@@ -483,13 +483,13 @@ fn void generate_report()
 			if (try fidx = f.output.index_of("- Function: "))
 			{
 				String after = f.output[fidx + 12..];
-				usz end = after.index_of("\n") ?? after.len;
+				sz end = after.index_of("\n") ?? after.len;
 				func_hint = after[:end].trim();
 			}
 			if (try sidx = f.output.index_of("- Source file: "))
 			{
 				String after = f.output[sidx + 15..];
-				usz end = after.index_of("\n") ?? after.len;
+				sz end = after.index_of("\n") ?? after.len;
 				String full_path = after[:end].trim();
 				if (try idx = full_path.index_of("src/compiler"))
 				{
@@ -570,7 +570,7 @@ fn void generate_report()
 			if (try sidx = out.index_of("Source file: "))
 			{
 				String after = out[sidx + 13..];
-				usz eidx = after.index_of("\n") ?? after.len;
+				sz eidx = after.index_of("\n") ?? after.len;
 				String path_and_line = after[:eidx].trim();
 				if (try src_idx = path_and_line.index_of("src/compiler"))
 				{

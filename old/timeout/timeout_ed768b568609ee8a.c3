@@ -1,6 +1,0 @@
-
-
-
-alias IntFn = fn int();
-
- 
