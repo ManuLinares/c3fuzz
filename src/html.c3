@@ -39,12 +39,12 @@ fn void generate_report()
 		{
 			foreach (f_path : entries)
 			{
-				String f = f_path.path_string;
+				String f = f_path;
 				if (!f.ends_with(".c3")) continue;
 
 				if (try p = folder_path.tappend(f))
 				{
-					if (try source = (String)std::io::file::load_temp(p.path_string))
+					if (try source = (String)std::io::file::load_temp(p))
 					{
 						// Skip noisy assembly-related findings in the dashboard
 						if (source.contains("asm(\""))
@@ -61,7 +61,7 @@ fn void generate_report()
 							(void)path::mkdir("old".to_tpath()!!);
 							(void)path::mkdir(old_dir.to_tpath()!!);
 							String old_path = string::tformat("%s/%s", old_dir, f);
-							(void)libc::rename(p.path_string.zstr_tcopy(), old_path.zstr_tcopy());
+							(void)libc::rename(p.zstr_tcopy(), old_path.zstr_tcopy());
 							log::info("Retired non-reproducing %s: %s -> %s", folder_name, f, old_path);
 							continue;
 						}
@@ -95,7 +95,7 @@ fn void generate_report()
 							(void)path::mkdir("old".to_tpath()!!);
 							(void)path::mkdir(old_dir.to_tpath()!!);
 							String old_path = string::tformat("%s/%s", old_dir, f);
-							(void)libc::rename(p.path_string.zstr_tcopy(), old_path.zstr_tcopy());
+							(void)libc::rename(p.zstr_tcopy(), old_path.zstr_tcopy());
 							log::info("Retired duplicate bug %s: %s -> %s (Key: %s)", folder_name, f, old_path, res.key);
 							continue;
 						}
@@ -122,7 +122,7 @@ fn void generate_report()
 							}
 
 							String new_path = string::tformat("%s/%s", target_folder, new_f);
-							(void)libc::rename(p.path_string.zstr_tcopy(), new_path.zstr_tcopy());
+							(void)libc::rename(p.zstr_tcopy(), new_path.zstr_tcopy());
 							log::info("Reclassified %s -> %s: %s -> %s", folder_name, target_folder, f, new_f);
 							final_filename = new_f;
 						}
