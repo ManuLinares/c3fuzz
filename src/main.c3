@@ -266,7 +266,7 @@ fn void collect_c3_files(std::io::path::Path p, List{String}* seeds) @local
 		String ext = p.extension() ?? "";
 		if (ext == "c3" || ext == "c3t")
 		{
-			if (try String source = (String)std::io::file::load_temp(p.str_view()))
+			if (try String source = (String)std::io::file::load_temp(p))
 			{
 				// For .c3t files: strip the trailing '/* #expect: ...' block
 				if (ext == "c3t")
@@ -291,7 +291,7 @@ fn void collect_c3_files(std::io::path::Path p, List{String}* seeds) @local
 		{
 			foreach (f : entries)
 			{
-				if (try child = p.append(tmem, f.str_view()))
+				if (try child = p.append(tmem, f))
 				{
 					collect_c3_files(child, seeds);
 				}
