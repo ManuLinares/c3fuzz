@@ -522,7 +522,7 @@ fn void generate_report()
 
 		// Always show the repro command (works regardless of binary content)
 		String folder_lc = f.type.to_lower_copy(tmem);
-		String repro_cmd = string::tformat("cat %s/%s | c3c compile-only - --build-dir /tmp --obj-out /tmp -O0 -g0 --threads 1 --use-stdlib=no --no-entry", folder_lc, f.filename);
+		String repro_cmd = string::tformat("c3c compile-only %s/%s --build-dir /tmp --obj-out /tmp -O0 -g0 --threads 1 --no-entry", folder_lc, f.filename);
 		html.append("<div class='code-wrapper'>");
 		html.append("<div class='code-header'><span class='lang-label' style='color: #79c0ff;'>REPRO COMMAND</span>");
 		html.append("<button class='copy-btn' onclick='copyCode(this)'>Copy</button></div>");
