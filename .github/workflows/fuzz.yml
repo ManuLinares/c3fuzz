@@ -6,7 +6,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # Run at the start of every 2nd hour
+    - cron: '0 */12 * * *'
   workflow_dispatch:
     inputs:
       timeout:
